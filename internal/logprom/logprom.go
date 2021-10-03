@@ -139,7 +139,18 @@ func parseConfig(c *config.Config, registerer *prometheus.Registerer) {
 			}
 		}
 
+		m := prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: fmt.Sprintf("logprom_%s_matched", l.Container.Image),
+			},
+			labels,
+		)
+		(*registerer).MustRegister(m)
+		tracking[i].PrometheusMapping[l.Container.Image] = m
+
+
 		for k, t := range l.PrometheusMapping {
+
 			switch t {
 			case config.Counter:
 				m := prometheus.NewCounterVec(
@@ -180,6 +191,7 @@ func parseConfig(c *config.Config, registerer *prometheus.Registerer) {
 		if l.Container.Image != "" {
 			tracking[i].Container.Image = regexp.MustCompile(l.Container.Image)
 		}
+
 	}
 }
 
@@ -210,14 +222,17 @@ func trackContainer(containerID, containerName string, logRegex *regexp.Regexp, 
 		if err != nil {
 			break
 		}
+		lv := []string{containerName}
+
+		metric[containerName[1:]].(*prometheus.GaugeVec).WithLabelValues(lv...).Set(1)
 		if !logRegex.MatchString(l) {
+			metric[containerName[1:]].(*prometheus.GaugeVec).WithLabelValues(lv...).Set(0)
 			log.Debugf("Log not match: %s", l)
 			continue
 		}
 
 		match := logRegex.FindStringSubmatch(l)
 		// labels := map[string]int{}
-		lv := []string{containerName}
 		for i, label := range logRegex.SubexpNames() {
 			if i != 0 && label != "" {
 				if strings.HasPrefix(label, "label_") {
